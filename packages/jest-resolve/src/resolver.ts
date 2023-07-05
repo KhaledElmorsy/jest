@@ -461,6 +461,10 @@ export default class Resolver {
     );
   }
 
+  isNodePath(moduleName: string): boolean {
+    return moduleName.startsWith('node:');
+  }
+
   getModule(name: string): string | null {
     return this._moduleMap.getModule(
       name,
@@ -485,16 +489,9 @@ export default class Resolver {
   }
 
   getMockModule(from: string, name: string): string | null {
-    const mock = this._moduleMap.getMockModule(name);
-    if (mock) {
-      return mock;
-    } else {
-      const moduleName = this.resolveStubModuleName(from, name);
-      if (moduleName) {
-        return this.getModule(moduleName) || moduleName;
-      }
-    }
-    return null;
+    const resolvedName = this.resolveStubModuleName(from, name) ?? name;
+    const mock = this._moduleMap.getMockModule(resolvedName);
+    return mock ?? null;
   }
 
   async getMockModuleAsync(from: string, name: string): Promise<string | null> {
@@ -616,7 +613,9 @@ export default class Resolver {
     options?: ResolveModuleConfig,
   ): string | null {
     if (this.isCoreModule(moduleName)) {
-      return moduleName;
+      return this.isNodePath(moduleName)
+        ? moduleName.replace('node:', '')
+        : moduleName;
     }
     if (moduleName.startsWith('data:')) {
       return moduleName;
@@ -707,6 +706,11 @@ export default class Resolver {
   }
 
   resolveStubModuleName(from: string, moduleName: string): string | null {
+    // Strip node URL scheme from core modules imported using it
+    if (this.isCoreModule(moduleName) && this.isNodePath(moduleName)) {
+      return moduleName.replace('node:', '');
+    }
+
     const dirname = path.dirname(from);
 
     const {extensions, moduleDirectory, paths} = this._prepareForResolution(

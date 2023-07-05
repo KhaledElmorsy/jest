@@ -1013,16 +1013,16 @@ export default class Runtime {
       return module as T;
     }
 
-    const manualMockOrStub = this._resolver.getMockModule(from, moduleName);
+    /** Resolved mock module path from (potentially aliased) module name. */
+    const manualMockPath: string | null = (() => {
+      // Attempt to get manual mock path when moduleName is a:
 
-    let modulePath =
-      this._resolver.getMockModule(from, moduleName) ||
-      this._resolveCjsModule(from, moduleName);
+      // A. Module name, i.e. 'jest', 'fs', 'node:fs':
+      // Look for root manual mock module '<rootDir>/__mocks__/'
+      const rootMock = this._resolver.getMockModule(from, moduleName);
+      if (rootMock) return rootMock;
 
-    let isManualMock =
-      manualMockOrStub &&
-      !this._resolver.resolveStubModuleName(from, moduleName);
-    if (!isManualMock) {
+      // B. Relative/Absolute path:
       // If the actual module file has a __mocks__ dir sitting immediately next
       // to it, look to see if there is a manual mock for this file.
       //
@@ -1034,7 +1034,7 @@ export default class Runtime {
       // Where some other module does a relative require into each of the
       // respective subDir{1,2} directories and expects a manual mock
       // corresponding to that particular my_module.js file.
-
+      const modulePath = this._resolveCjsModule(from, moduleName);
       const moduleDir = path.dirname(modulePath);
       const moduleFileName = path.basename(modulePath);
       const potentialManualMock = path.join(
@@ -1043,25 +1043,27 @@ export default class Runtime {
         moduleFileName,
       );
       if (fs.existsSync(potentialManualMock)) {
-        isManualMock = true;
-        modulePath = potentialManualMock;
+        return potentialManualMock;
       }
-    }
-    if (isManualMock) {
+
+      return null;
+    })();
+
+    if (manualMockPath) {
       const localModule: InitialModule = {
         children: [],
         exports: {},
-        filename: modulePath,
-        id: modulePath,
+        filename: manualMockPath,
+        id: manualMockPath,
         loaded: false,
-        path: path.dirname(modulePath),
+        path: path.dirname(manualMockPath),
       };
 
       this._loadModule(
         localModule,
         from,
         moduleName,
-        modulePath,
+        manualMockPath,
         undefined,
         mockRegistry,
       );
